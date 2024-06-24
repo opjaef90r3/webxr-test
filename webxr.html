@@ -199,8 +199,8 @@
       // Advanced movement component
       AFRAME.registerComponent('advanced-movement', {
         schema: {
-          walkSpeed: {type: 'number', default: 2},
-          runSpeed: {type: 'number', default: 5},
+          walkSpeed: {type: 'number', default: 4},
+          runSpeed: {type: 'number', default: 8},
           jumpForce: {type: 'number', default: 5},
           height: {type: 'number', default: 1.6}
         },
@@ -210,6 +210,7 @@
           this.deceleration = new THREE.Vector3(-10, -9.8, -10);
           this.isRunning = false;
           this.canJump = true;
+          this.currentHeight = this.data.height;
           
           this.el.addEventListener('thumbstickmoved', this.onThumbstickMoved.bind(this));
           this.el.addEventListener('abuttondown', this.onJump.bind(this));
@@ -221,7 +222,7 @@
           const y = evt.detail.y;
           const speed = this.isRunning ? this.data.runSpeed : this.data.walkSpeed;
           this.acceleration.x = x * speed;
-          this.acceleration.z = -y * speed;
+          this.acceleration.z = y * speed;  // Changed from -y to y to fix inverted movement
         },
         onJump: function () {
           if (this.canJump) {
@@ -235,10 +236,9 @@
           console.log(this.isRunning ? 'Running' : 'Walking');
         },
         adjustHeight: function () {
-          const currentHeight = this.el.object3D.position.y;
-          const newHeight = currentHeight === this.data.height ? this.data.height / 2 : this.data.height;
-          this.el.object3D.position.y = newHeight;
-          console.log(`Height adjusted to ${newHeight}`);
+          this.currentHeight = this.currentHeight === this.data.height ? this.data.height / 2 : this.data.height;
+          this.el.object3D.position.y = this.currentHeight;
+          console.log(`Height adjusted to ${this.currentHeight}`);
         },
         tick: function (time, timeDelta) {
           const deltaSeconds = timeDelta / 1000;
@@ -259,8 +259,8 @@
           this.el.object3D.position.y += this.velocity.y * deltaSeconds;
           this.el.object3D.position.z += movementVector.z * deltaSeconds;
           
-          if (this.el.object3D.position.y < this.data.height) {
-            this.el.object3D.position.y = this.data.height;
+          if (this.el.object3D.position.y < this.currentHeight) {
+            this.el.object3D.position.y = this.currentHeight;
             this.velocity.y = 0;
             this.canJump = true;
           }
@@ -275,8 +275,8 @@
       </a-assets>
 
       <!-- Player rig -->
-      <a-entity id="rig" position="0 1.6 0" advanced-movement="walkSpeed: 2; runSpeed: 5; jumpForce: 5; height: 1.6">
-        <a-entity camera look-controls></a-entity>
+      <a-entity id="rig" position="0 1.6 0" advanced-movement="walkSpeed: 4; runSpeed: 8; jumpForce: 5; height: 1.6">
+        <a-entity camera look-controls position="0 0 0"></a-entity>
         <a-entity id="leftHand" oculus-touch-controls="hand: left"></a-entity>
         <a-entity id="rightHand" oculus-touch-controls="hand: right"></a-entity>
       </a-entity>
@@ -307,9 +307,9 @@
 
       <!-- Additional Environment Objects -->
       <a-entity id="obstacles" position="0 0 -5">
-        <a-box position="-3 0.5 0" width="1" height="1" depth="1" color="#45a5f5" animation="property: rotation; to: 0 360 0; loop: true; dur: 10000"></a-box>
-        <a-torus position="3 1 0" radius="0.5" radius-tubular="0.1" color="#ff9800" animation="property: rotation; to: 360 360 0; loop: true; dur: 8000"></a-torus>
-        <a-octahedron position="0 1.25 3" radius="0.5" color="#4caf50" animation="property: position; to: 0 2 3; dir: alternate; loop: true; dur: 2000"></a-octahedron>
+        <a-box position="-3 0.5 0" width="1" height="1" depth="1" material="color: #45a5f5" animation="property: rotation; to: 0 360 0; loop: true; dur: 10000"></a-box>
+        <a-torus position="3 1 0" radius="0.5" radius-tubular="0.1" material="color: #ff9800" animation="property: rotation; to: 360 360 0; loop: true; dur: 8000"></a-torus>
+        <a-octahedron position="0 1.25 3" radius="0.5" material="color: #4caf50" animation="property: position; to: 0 2 3; dir: alternate; loop: true; dur: 2000"></a-octahedron>
       </a-entity>
 
       <!-- Lighting -->
@@ -332,9 +332,7 @@
         bullet.setAttribute('dynamic-body', '');
         bullet.setAttribute('bullet', '');
         bullet.setAttribute('radius', '0.05');
-        bullet.setAttribute('color', '#ffff00');
-        bullet.setAttribute('emissive', '#ffff00');
-        bullet.setAttribute('emissiveIntensity', '0.5');
+        bullet.setAttribute('material', 'color: #ffff00; emissive: #ffff00; emissiveIntensity: 0.5');
         
         var pos = new THREE.Vector3();
         var rot = new THREE.Quaternion();
