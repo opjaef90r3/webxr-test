@@ -6,9 +6,29 @@
     <script>
       AFRAME.registerComponent('gun', {
         init: function () {
-          this.el.addEventListener('click', function (evt) {
-            this.emit('shoot');
-          });
+          this.shooting = false;
+          this.el.addEventListener('gripdown', this.onGripDown.bind(this));
+          this.el.addEventListener('gripup', this.onGripUp.bind(this));
+          this.el.addEventListener('triggerdown', this.onTriggerDown.bind(this));
+          this.el.addEventListener('triggerup', this.onTriggerUp.bind(this));
+        },
+        onGripDown: function () {
+          this.el.object3D.visible = true;
+        },
+        onGripUp: function () {
+          this.el.object3D.visible = false;
+        },
+        onTriggerDown: function () {
+          this.shooting = true;
+          this.shoot();
+        },
+        onTriggerUp: function () {
+          this.shooting = false;
+        },
+        shoot: function () {
+          if (!this.shooting) return;
+          this.el.emit('shoot');
+          setTimeout(() => this.shoot(), 200);
         }
       });
 
@@ -37,9 +57,17 @@
 
       AFRAME.registerComponent('sound-generator', {
         init: function () {
+          this.audioContext = null;
+          this.isInitialized = false;
+          document.body.addEventListener('click', () => this.initAudio(), { once: true });
+        },
+        initAudio: function () {
+          if (this.isInitialized) return;
           this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          this.isInitialized = true;
         },
         playShootSound: function () {
+          if (!this.isInitialized) return;
           const oscillator = this.audioContext.createOscillator();
           oscillator.type = 'square';
           oscillator.frequency.setValueAtTime(440, this.audioContext.currentTime);
@@ -55,6 +83,7 @@
           oscillator.stop(this.audioContext.currentTime + 0.2);
         },
         playHitSound: function () {
+          if (!this.isInitialized) return;
           const oscillator = this.audioContext.createOscillator();
           oscillator.type = 'sine';
           oscillator.frequency.setValueAtTime(880, this.audioContext.currentTime);
@@ -70,25 +99,54 @@
           oscillator.stop(this.audioContext.currentTime + 0.1);
         }
       });
+
+      AFRAME.registerComponent('vr-movement', {
+        init: function () {
+          this.velocity = new THREE.Vector3();
+          this.keyPressed = { up: false, down: false, left: false, right: false };
+          this.onAxisMove = this.onAxisMove.bind(this);
+          this.el.addEventListener('axismove', this.onAxisMove);
+        },
+        onAxisMove: function (evt) {
+          if (evt.detail.axis[0] >= 0.5) this.keyPressed.right = true;
+          else if (evt.detail.axis[0] <= -0.5) this.keyPressed.left = true;
+          else { this.keyPressed.right = false; this.keyPressed.left = false; }
+
+          if (evt.detail.axis[1] >= 0.5) this.keyPressed.down = true;
+          else if (evt.detail.axis[1] <= -0.5) this.keyPressed.up = true;
+          else { this.keyPressed.down = false; this.keyPressed.up = false; }
+        },
+        tick: function (time, timeDelta) {
+          const currentPosition = this.el.object3D.position;
+          const currentRotation = this.el.object3D.rotation;
+          
+          this.velocity.set(0, 0, 0);
+          
+          if (this.keyPressed.up) this.velocity.z -= 1;
+          if (this.keyPressed.down) this.velocity.z += 1;
+          if (this.keyPressed.left) this.velocity.x -= 1;
+          if (this.keyPressed.right) this.velocity.x += 1;
+          
+          this.velocity.applyAxisAngle(new THREE.Vector3(0, 1, 0), currentRotation.y);
+          this.velocity.multiplyScalar(0.1);
+          
+          currentPosition.add(this.velocity);
+          this.el.object3D.position.copy(currentPosition);
+        }
+      });
     </script>
   </head>
   <body>
     <a-scene physics="debug: true" sound-generator>
-      <a-entity id="rig" movement-controls="fly: true; speed: 0.2" position="0 1.6 0">
-        <a-entity camera look-controls>
-          <a-entity cursor="fuse: true; fuseTimeout: 500"
-                    position="0 0 -1"
-                    geometry="primitive: ring; radiusInner: 0.02; radiusOuter: 0.03"
-                    material="color: black; shader: flat"
-                    raycaster="objects: .raycastable">
+      <a-entity id="rig" position="0 1.6 0" vr-movement>
+        <a-entity camera look-controls></a-entity>
+        <a-entity id="leftHand" oculus-touch-controls="hand: left"></a-entity>
+        <a-entity id="rightHand" oculus-touch-controls="hand: right">
+          <a-entity id="gun" gun visible="false" position="0 0 -0.25">
+            <a-box color="gray" depth="0.2" height="0.2" width="0.5"></a-box>
+            <a-cylinder color="darkgray" radius="0.05" height="0.3" position="0 0 -0.25"></a-cylinder>
+            <a-entity id="bulletSpawn" position="0 0 -0.4"></a-entity>
           </a-entity>
-        </a-entity>
-        <a-entity id="gun"
-                  gun
-                  position="0.5 -0.5 -0.5"
-                  rotation="-10 -90 0">
-          <a-box color="gray" depth="0.2" height="0.2" width="0.5"></a-box>
-          <a-cylinder color="darkgray" radius="0.05" height="0.3" position="0 0 -0.25"></a-cylinder>
         </a-entity>
       </a-entity>
 
@@ -105,22 +163,29 @@
     <script>
       var scene = document.querySelector('a-scene');
       var gun = document.querySelector('#gun');
+      var bulletSpawn = document.querySelector('#bulletSpawn');
       var soundGenerator = scene.components['sound-generator'];
 
       gun.addEventListener('shoot', function () {
         var bullet = document.createElement('a-sphere');
         bullet.setAttribute('dynamic-body', '');
         bullet.setAttribute('bullet', '');
-        bullet.setAttribute('radius', '0.1');
+        bullet.setAttribute('radius', '0.05');
         bullet.setAttribute('color', 'black');
         bullet.setAttribute('class', 'raycastable');
+        
         var pos = new THREE.Vector3();
-        var rot = new THREE.Euler();
-        gun.object3D.getWorldPosition(pos);
-        gun.object3D.getWorldRotation(rot);
+        var rot = new THREE.Quaternion();
+        bulletSpawn.object3D.getWorldPosition(pos);
+        bulletSpawn.object3D.getWorldQuaternion(rot);
+
         bullet.setAttribute('position', pos);
-        bullet.setAttribute('rotation', rot);
-        bullet.setAttribute('velocity', new THREE.Vector3(0, 0, -30));
+        
+        var direction = new THREE.Vector3(0, 0, -1);
+        direction.applyQuaternion(rot);
+        direction.multiplyScalar(30);
+
+        bullet.setAttribute('velocity', direction);
         scene.appendChild(bullet);
         soundGenerator.playShootSound();
       });
