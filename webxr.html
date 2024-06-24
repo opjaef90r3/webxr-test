@@ -9,23 +9,44 @@
       AFRAME.registerComponent('gun', {
         init: function () {
           this.shooting = false;
-          this.currentFireMode = 'semi'; // 'semi', 'burst', 'auto'
+          this.currentFireMode = 'semi';
           this.burstCount = 0;
           this.lastShootTime = 0;
           this.ammo = 30;
           this.maxAmmo = 30;
+          this.isHeld = false;
           this.el.addEventListener('triggerdown', this.onTriggerDown.bind(this));
           this.el.addEventListener('triggerup', this.onTriggerUp.bind(this));
           this.el.addEventListener('bbuttondown', this.toggleFireMode.bind(this));
+          this.el.addEventListener('gripdown', this.onGripDown.bind(this));
+          this.el.addEventListener('gripup', this.onGripUp.bind(this));
           this.updateAmmoDisplay();
         },
         onTriggerDown: function () {
-          this.shooting = true;
-          this.shoot();
+          if (this.isHeld) {
+            this.shooting = true;
+            this.shoot();
+          }
         },
         onTriggerUp: function () {
           this.shooting = false;
           this.burstCount = 0;
+        },
+        onGripDown: function () {
+          this.isHeld = !this.isHeld;
+          if (this.isHeld) {
+            this.el.setAttribute('visible', true);
+            document.querySelector('#rightHand').appendChild(this.el);
+            this.el.setAttribute('position', '0 0 -0.25');
+            this.el.setAttribute('rotation', '0 0 0');
+          } else {
+            document.querySelector('#gunHolder').appendChild(this.el);
+            this.el.setAttribute('position', '0.5 1 -0.5');
+            this.el.setAttribute('rotation', '0 0 0');
+          }
+        },
+        onGripUp: function () {
+          // Do nothing, as we want to toggle on grip down only
         },
         toggleFireMode: function () {
           const modes = ['semi', 'burst', 'auto'];
@@ -37,7 +58,7 @@
           if (!this.shooting || this.ammo <= 0) return;
           
           const now = Date.now();
-          if (now - this.lastShootTime < 100) return; // Rate of fire limit
+          if (now - this.lastShootTime < 100) return;
           
           this.lastShootTime = now;
           this.ammo--;
@@ -67,43 +88,6 @@
         }
       });
 
-      // Pickable component
-      AFRAME.registerComponent('pickable', {
-        schema: {
-          hand: {type: 'selector'}
-        },
-        init: function () {
-          this.el.addEventListener('gripdown', this.onGripDown.bind(this));
-          this.el.addEventListener('gripup', this.onGripUp.bind(this));
-          this.originalParent = this.el.parentNode;
-          this.originalPosition = this.el.getAttribute('position');
-          this.originalRotation = this.el.getAttribute('rotation');
-        },
-        onGripDown: function () {
-          const handPosition = new THREE.Vector3();
-          this.data.hand.object3D.getWorldPosition(handPosition);
-          const distance = this.el.object3D.position.distanceTo(handPosition);
-          
-          if (distance < 0.5) {  // If hand is close enough
-            this.el.setAttribute('visible', true);
-            this.data.hand.appendChild(this.el);
-            this.el.setAttribute('position', '0 0 -0.25');
-            this.el.setAttribute('rotation', '0 0 0');
-          }
-        },
-        onGripUp: function () {
-          this.originalParent.appendChild(this.el);
-          this.el.setAttribute('position', this.originalPosition);
-          this.el.setAttribute('rotation', this.originalRotation);
-        },
-        tick: function() {
-          if (this.el.parentNode === this.originalParent) {
-            this.el.setAttribute('position', this.originalPosition);
-            this.el.setAttribute('rotation', this.originalRotation);
-          }
-        }
-      });
-
       // Target component
       AFRAME.registerComponent('target', {
         schema: {
@@ -123,10 +107,9 @@
               this.el.setAttribute('visible', 'true');
             }, 2000);
           } else {
-            // Visual feedback for hit
             this.el.setAttribute('material', 'color', 'red');
             setTimeout(() => {
-              this.el.setAttribute('material', 'color', 'blue');
+              this.el.setAttribute('material', 'color', this.el.getAttribute('data-original-color'));
             }, 100);
           }
         }
@@ -140,7 +123,7 @@
             if (this.el.parentNode) {
               this.el.parentNode.removeChild(this.el);
             }
-          }, 5000);  // Bullet lifespan
+          }, 5000);
         },
         onCollide: function (evt) {
           if (evt.detail.body.el.getAttribute('target')) {
@@ -199,71 +182,35 @@
       // Advanced movement component
       AFRAME.registerComponent('advanced-movement', {
         schema: {
-          walkSpeed: {type: 'number', default: 4},
-          runSpeed: {type: 'number', default: 8},
-          jumpForce: {type: 'number', default: 5},
-          height: {type: 'number', default: 1.6}
+          speed: {type: 'number', default: 40},
+          rotationSpeed: {type: 'number', default: 2}
         },
         init: function () {
           this.velocity = new THREE.Vector3();
-          this.acceleration = new THREE.Vector3();
-          this.deceleration = new THREE.Vector3(-10, -9.8, -10);
-          this.isRunning = false;
-          this.canJump = true;
-          this.currentHeight = this.data.height;
+          this.rotation = new THREE.Euler();
           
-          this.el.addEventListener('thumbstickmoved', this.onThumbstickMoved.bind(this));
-          this.el.addEventListener('abuttondown', this.onJump.bind(this));
-          this.el.addEventListener('xbuttondown', this.toggleRun.bind(this));
-          this.el.addEventListener('ybuttondown', this.adjustHeight.bind(this));
+          this.leftHand = document.querySelector('#leftHand');
+          this.rightHand = document.querySelector('#rightHand');
+          
+          this.leftHand.addEventListener('thumbstickmoved', this.onLeftThumbstickMoved.bind(this));
+          this.rightHand.addEventListener('thumbstickmoved', this.onRightThumbstickMoved.bind(this));
         },
-        onThumbstickMoved: function (evt) {
-          const x = evt.detail.x;
-          const y = evt.detail.y;
-          const speed = this.isRunning ? this.data.runSpeed : this.data.walkSpeed;
-          this.acceleration.x = x * speed;
-          this.acceleration.z = y * speed;  // Changed from -y to y to fix inverted movement
+        onLeftThumbstickMoved: function (evt) {
+          this.velocity.x = evt.detail.x * this.data.speed;
+          this.velocity.z = -evt.detail.y * this.data.speed;
         },
-        onJump: function () {
-          if (this.canJump) {
-            this.velocity.y = this.data.jumpForce;
-            this.canJump = false;
-            setTimeout(() => { this.canJump = true; }, 1000);
-          }
-        },
-        toggleRun: function () {
-          this.isRunning = !this.isRunning;
-          console.log(this.isRunning ? 'Running' : 'Walking');
-        },
-        adjustHeight: function () {
-          this.currentHeight = this.currentHeight === this.data.height ? this.data.height / 2 : this.data.height;
-          this.el.object3D.position.y = this.currentHeight;
-          console.log(`Height adjusted to ${this.currentHeight}`);
+        onRightThumbstickMoved: function (evt) {
+          this.rotation.y = -evt.detail.x * this.data.rotationSpeed;
         },
         tick: function (time, timeDelta) {
           const deltaSeconds = timeDelta / 1000;
-          const rotation = this.el.object3D.rotation;
-          
-          this.velocity.x += this.acceleration.x * deltaSeconds;
-          this.velocity.y += this.acceleration.y * deltaSeconds;
-          this.velocity.z += this.acceleration.z * deltaSeconds;
-          
-          this.velocity.x += this.deceleration.x * this.velocity.x * deltaSeconds;
-          this.velocity.y += this.deceleration.y * deltaSeconds;
-          this.velocity.z += this.deceleration.z * this.velocity.z * deltaSeconds;
+          const cameraRotation = this.el.querySelector('[camera]').object3D.rotation;
           
           const movementVector = new THREE.Vector3(this.velocity.x, 0, this.velocity.z);
-          movementVector.applyAxisAngle(new THREE.Vector3(0, 1, 0), rotation.y);
+          movementVector.applyAxisAngle(new THREE.Vector3(0, 1, 0), cameraRotation.y);
           
-          this.el.object3D.position.x += movementVector.x * deltaSeconds;
-          this.el.object3D.position.y += this.velocity.y * deltaSeconds;
-          this.el.object3D.position.z += movementVector.z * deltaSeconds;
-          
-          if (this.el.object3D.position.y < this.currentHeight) {
-            this.el.object3D.position.y = this.currentHeight;
-            this.velocity.y = 0;
-            this.canJump = true;
-          }
+          this.el.object3D.position.add(movementVector.multiplyScalar(deltaSeconds));
+          this.el.object3D.rotateY(this.rotation.y * deltaSeconds);
         }
       });
     </script>
@@ -275,49 +222,56 @@
       </a-assets>
 
       <!-- Player rig -->
-      <a-entity id="rig" position="0 1.6 0" advanced-movement="walkSpeed: 4; runSpeed: 8; jumpForce: 5; height: 1.6">
+      <a-entity id="rig" position="0 0.8 0" advanced-movement="speed: 40; rotationSpeed: 2">
         <a-entity camera look-controls position="0 0 0"></a-entity>
         <a-entity id="leftHand" oculus-touch-controls="hand: left"></a-entity>
         <a-entity id="rightHand" oculus-touch-controls="hand: right"></a-entity>
       </a-entity>
 
+      <!-- Gun holder -->
+      <a-entity id="gunHolder" position="0.5 1 -0.5"></a-entity>
+
       <!-- Gun -->
-      <a-entity id="gun" gun pickable="hand: #rightHand" position="0.5 1 -0.5">
-        <a-box color="#4d4d4d" depth="0.2" height="0.3" width="0.1"></a-box>
-        <a-cylinder color="#1a1a1a" radius="0.02" height="0.4" position="0 0.1 -0.25" rotation="90 0 0"></a-cylinder>
-        <a-box color="#4d4d4d" depth="0.05" height="0.15" width="0.1" position="0 -0.1 0.05"></a-box>
+      <a-entity id="gun" gun position="0.5 1 -0.5">
+        <a-box material="color: #4d4d4d; metalness: 0.8; roughness: 0.2" depth="0.2" height="0.3" width="0.1"></a-box>
+        <a-cylinder material="color: #1a1a1a; metalness: 0.9; roughness: 0.1" radius="0.02" height="0.4" position="0 0.1 -0.25" rotation="90 0 0"></a-cylinder>
+        <a-box material="color: #4d4d4d; metalness: 0.8; roughness: 0.2" depth="0.05" height="0.15" width="0.1" position="0 -0.1 0.05"></a-box>
         <a-entity id="bulletSpawn" position="0 0.15 -0.45"></a-entity>
+        <a-box material="color: #ff0000; emissive: #ff0000; emissiveIntensity: 0.5" depth="0.02" height="0.02" width="0.02" position="0 0.2 -0.1"></a-box>
+        <a-text value="LASER" position="0.06 0 0" rotation="0 -90 0" scale="0.1 0.1 0.1" color="#ff0000"></a-text>
       </a-entity>
 
       <!-- Environment -->
-      <a-entity environment="preset: tron; groundColor: #0e172a; groundColor2: #162442; groundTexture: walkernoise; grid: 1x1; gridColor: #0c80ff; horizonColor: #3fb2ff; skyColor: #9ae3ff; lighting: distant"></a-entity>
+      <a-entity environment="preset: tron; groundColor: #0a0a0a; groundColor2: #0f0f0f; groundTexture: walkernoise; grid: 2x2; gridColor: #00ffff; horizonColor: #003366; skyColor: #000033; lighting: distant; lightPosition: 1 5 -2; fog: 0.7; dressing: towers; dressingAmount: 50; dressingColor: #00ffff; dressingScale: 50; dressingVariance: 20 20 20; dressingUniformScale: true; playArea: 100"></a-entity>
 
       <!-- Targets -->
-      <a-entity id="targetGroup" position="0 0 -10">
-        <a-box class="target" target="health: 100" position="-2 1.5 0" depth="0.5" height="0.5" width="0.5" color="blue" animation="property: position; to: -2 1.5 -5; dur: 5000; dir: alternate; loop: true"></a-box>
-        <a-sphere class="target" target="health: 150" position="0 2 -2" radius="0.4" color="green" animation="property: position; to: 0 2 2; dur: 4000; dir: alternate; loop: true"></a-sphere>
-        <a-cylinder class="target" target="health: 200" position="2 1 0" radius="0.3" height="1" color="red" animation="property: rotation; to: 0 360 0; dur: 3000; loop: true"></a-cylinder>
+      <a-entity id="targetGroup">
+        <a-box class="target" target="health: 100" position="-10 1.5 -20" depth="0.5" height="0.5" width="0.5" material="color: #00ff00; emissive: #00ff00; emissiveIntensity: 0.2" animation="property: position; to: -10 1.5 -25; dir: alternate; dur: 5000; loop: true" data-original-color="#00ff00"></a-box>
+        <a-sphere class="target" target="health: 150" position="0 2 -30" radius="0.4" material="color: #ff00ff; emissive: #ff00ff; emissiveIntensity: 0.2" animation="property: position; to: 0 2 -35; dir: alternate; dur: 4000; loop: true" data-original-color="#ff00ff"></a-sphere>
+        <a-cylinder class="target" target="health: 200" position="10 1 -25" radius="0.3" height="1" material="color: #ffff00; emissive: #ffff00; emissiveIntensity: 0.2" animation="property: rotation; to: 0 360 0; dur: 3000; loop: true" data-original-color="#ffff00"></a-cylinder>
+        <a-torus class="target" target="health: 250" position="-15 3 -40" radius="1" radius-tubular="0.1" material="color: #00ffff; emissive: #00ffff; emissiveIntensity: 0.2" animation="property: rotation; to: 360 360 0; dur: 6000; loop: true" data-original-color="#00ffff"></a-torus>
+        <a-octahedron class="target" target="health: 300" position="15 4 -35" radius="0.7" material="color: #ff6600; emissive: #ff6600; emissiveIntensity: 0.2" animation="property: position; to: 15 6 -35; dir: alternate; dur: 3000; loop: true" data-original-color="#ff6600"></a-octahedron>
       </a-entity>
 
       <!-- UI Elements -->
-<!-- UI Elements (continued) -->
       <a-text id="score" value="Score: 0" position="-0.75 1.5 -2" scale="0.5 0.5 0.5" color="white"></a-text>
       <a-text id="ammoDisplay" value="Ammo: 30/30" position="0.75 1.5 -2" scale="0.5 0.5 0.5" color="white"></a-text>
-      <a-text id="modeDisplay" value="Mode: Semi" position="0 1.7 -2" scale="0.5 0.5 0.5" color="white"></a-text>
+<a-text id="modeDisplay" value="Mode: Semi" position="0 1.7 -2" scale="0.5 0.5 0.5" color="white"></a-text>
 
       <!-- Additional Environment Objects -->
-      <a-entity id="obstacles" position="0 0 -5">
-        <a-box position="-3 0.5 0" width="1" height="1" depth="1" material="color: #45a5f5" animation="property: rotation; to: 0 360 0; loop: true; dur: 10000"></a-box>
-        <a-torus position="3 1 0" radius="0.5" radius-tubular="0.1" material="color: #ff9800" animation="property: rotation; to: 360 360 0; loop: true; dur: 8000"></a-torus>
-        <a-octahedron position="0 1.25 3" radius="0.5" material="color: #4caf50" animation="property: position; to: 0 2 3; dir: alternate; loop: true; dur: 2000"></a-octahedron>
+      <a-entity id="obstacles">
+        <a-box position="-20 2 -30" width="4" height="4" depth="4" material="color: #45a5f5; metalness: 0.8; roughness: 0.2" animation="property: rotation; to: 0 360 0; loop: true; dur: 10000"></a-box>
+        <a-torus position="20 3 -40" radius="3" radius-tubular="0.2" material="color: #ff9800; metalness: 0.6; roughness: 0.4" animation="property: rotation; to: 360 360 0; loop: true; dur: 8000"></a-torus>
+        <a-octahedron position="0 5 -50" radius="2" material="color: #4caf50; metalness: 0.7; roughness: 0.3" animation="property: position; to: 0 8 -50; dir: alternate; loop: true; dur: 4000"></a-octahedron>
       </a-entity>
 
       <!-- Lighting -->
-      <a-light type="ambient" color="#ffffff" intensity="0.5"></a-light>
-      <a-light type="directional" color="#ffffff" intensity="0.8" position="-1 1 1"></a-light>
+      <a-light type="ambient" color="#ffffff" intensity="0.2"></a-light>
+      <a-light type="directional" color="#00ffff" intensity="0.6" position="-1 1 1"></a-light>
+      <a-light type="point" color="#ff00ff" intensity="0.4" position="5 5 -10"></a-light>
 
       <!-- Particle systems for visual effects -->
-      <a-entity position="0 2.25 -15" particle-system="preset: dust; particleCount: 2000; size: 0.5; color: #44ffff,#44ccff"></a-entity>
+      <a-entity position="0 10 -30" particle-system="preset: dust; particleCount: 5000; size: 0.5; color: #44ffff,#44ccff; accelerationValue: 0 -9.8 0; velocityValue: 0 15 0; velocitySpread: 10 7.5 10;"></a-entity>
     </a-scene>
 
     <script>
@@ -343,7 +297,7 @@
         
         var direction = new THREE.Vector3(0, 0, -1);
         direction.applyQuaternion(rot);
-        direction.multiplyScalar(30);
+        direction.multiplyScalar(50);  // Increased bullet speed
 
         bullet.setAttribute('velocity', direction);
         scene.appendChild(bullet);
@@ -391,11 +345,37 @@
           }
         });
 
-        // You could add more game logic here, such as:
-        // - Spawning new targets
-        // - Updating difficulty based on score
-        // - Checking win/lose conditions
+        // Spawn new targets periodically
+        if (Math.random() < 0.1) {  // 10% chance each loop
+          spawnNewTarget();
+        }
+
+        // Update difficulty based on score
+        updateDifficulty();
+
       }, 5000);  // Run every 5 seconds
+
+      function spawnNewTarget() {
+        var shapes = ['a-box', 'a-sphere', 'a-cylinder', 'a-torus', 'a-octahedron'];
+        var shape = shapes[Math.floor(Math.random() * shapes.length)];
+        var target = document.createElement(shape);
+        
+        target.setAttribute('class', 'target');
+        target.setAttribute('target', `health: ${100 + Math.floor(score / 100)}`);
+        target.setAttribute('position', `${Math.random()*40-20} ${Math.random()*5+1} ${-30-Math.random()*30}`);
+        target.setAttribute('material', `color: #${Math.floor(Math.random()*16777215).toString(16)}; emissive: #${Math.floor(Math.random()*16777215).toString(16)}; emissiveIntensity: 0.2`);
+        target.setAttribute('animation', 'property: position; to: ' + target.getAttribute('position').x + ' ' + (parseFloat(target.getAttribute('position').y) + 2) + ' ' + target.getAttribute('position').z + '; dir: alternate; dur: ' + (2000 + Math.random() * 3000) + '; loop: true');
+        
+        document.querySelector('#targetGroup').appendChild(target);
+      }
+
+      function updateDifficulty() {
+        var targets = document.querySelectorAll('.target');
+        targets.forEach(function(target) {
+          var currentSpeed = parseFloat(target.getAttribute('animation').dur);
+          target.setAttribute('animation', 'dur', currentSpeed * 0.99);  // Increase speed by 1%
+        });
+      }
     </script>
   </body>
 </html>
