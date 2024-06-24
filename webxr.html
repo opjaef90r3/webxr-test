@@ -41,7 +41,7 @@
         document.body.appendChild(renderer.domElement);
 
         // VRボタンの追加
-        document.body.appendChild(VRButton.createButton(renderer));
+        document.body.appendChild(THREE.VRButton.createButton(renderer));
 
         // 照明の追加
         const light = new THREE.HemisphereLight(0xffffff, 0x444444);
@@ -144,18 +144,18 @@
                     scene.remove(bullet);
                     bullets.splice(i, 1);
                     i--;
-                }
 
-                // 弾とボックスの衝突検出
-                for (let j = 0; j < boxes.length; j++) {
-                    const box = boxes[j];
-                    if (!box.userData.hit && bullet.position.distanceTo(box.position) < 0.5) {
-                        box.userData.hit = true;
-                        scene.remove(box);
-                        boxes.splice(j, 1);
-                        score++;
-                        document.getElementById('score').innerText = score;
-                        break;
+                    // 弾とボックスの衝突検出
+                    for (let j = 0; j < boxes.length; j++) {
+                        const box = boxes[j];
+                        if (!box.userData.hit && bullet.position.distanceTo(box.position) < 0.5) {
+                            box.userData.hit = true;
+                            scene.remove(box);
+                            boxes.splice(j, 1);
+                            score++;
+                            document.getElementById('score').innerText = score;
+                            break;
+                        }
                     }
                 }
             }
