@@ -15,22 +15,23 @@
           this.rotation = new THREE.Euler();
           this.leftHand = document.querySelector('#leftHand');
           this.rightHand = document.querySelector('#rightHand');
+          this.camera = document.querySelector('[camera]');
           this.leftHand.addEventListener('thumbstickmoved', this.onLeftThumbstickMoved.bind(this));
           this.rightHand.addEventListener('thumbstickmoved', this.onRightThumbstickMoved.bind(this));
         },
         onLeftThumbstickMoved: function (evt) {
           const x = evt.detail.x;
           const y = evt.detail.y;
-          this.velocity.set(x, 0, y);
+          this.velocity.set(x, 0, -y);  // Invert y for correct forward/backward movement
         },
         onRightThumbstickMoved: function (evt) {
           this.rotation.y = -evt.detail.x * this.data.rotationSpeed;
         },
         tick: function (time, timeDelta) {
           const deltaSeconds = timeDelta / 1000;
-          const cameraEl = this.el.querySelector('[camera]');
-          const rotation = cameraEl.object3D.rotation;
+          const rotation = this.camera.object3D.rotation;
           
+          // Apply camera Y rotation to movement
           this.velocity.applyAxisAngle(new THREE.Vector3(0, 1, 0), rotation.y);
           
           const movement = this.velocity.clone().multiplyScalar(this.data.speed * deltaSeconds);
@@ -119,7 +120,7 @@
           if (evt.detail.body.el.hasAttribute('bullet')) {
             this.currentHealth -= 10;
             if (this.currentHealth <= 0) {
-              this.el.setAttribute('visible', 'false');
+              this.explode();
               this.el.sceneEl.emit('updateScore', 10);
               setTimeout(() => {
                 this.currentHealth = this.data.health;
@@ -133,6 +134,37 @@
             }
             evt.detail.body.el.parentNode.removeChild(evt.detail.body.el);
           }
+        },
+        explode: function () {
+          const position = this.el.getAttribute('position');
+          const color = this.el.getAttribute('material').color;
+          
+          for (let i = 0; i < 10; i++) {
+            const fragment = document.createElement('a-entity');
+            fragment.setAttribute('geometry', {
+              primitive: 'box',
+              width: 0.1,
+              height: 0.1,
+              depth: 0.1
+            });
+            fragment.setAttribute('material', `color: ${color}; emissive: ${color}; emissiveIntensity: 0.5`);
+            fragment.setAttribute('position', position);
+            
+            const velocity = new THREE.Vector3(
+              (Math.random() - 0.5) * 5,
+              Math.random() * 5,
+              (Math.random() - 0.5) * 5
+            );
+            fragment.setAttribute('velocity', velocity);
+            
+            this.el.sceneEl.appendChild(fragment);
+            
+            setTimeout(() => {
+              this.el.sceneEl.removeChild(fragment);
+            }, 1000);
+          }
+          
+          this.el.setAttribute('visible', 'false');
         }
       });
 
@@ -214,6 +246,7 @@
       <a-plane position="0 5 0" rotation="90 0 0" width="50" height="50" material="color: #111; metalness: 0.9; roughness: 0.1; emissive: #001a33; emissiveIntensity: 0.2"></a-plane>
 
       <!-- Lighting -->
+<!-- Lighting -->
       <a-light type="ambient" color="#0000ff" intensity="0.2"></a-light>
       <a-light type="directional" color="#00ffff" intensity="0.6" position="-1 1 1"></a-light>
       <a-light type="point" color="#ff00ff" intensity="0.4" position="5 5 -10"></a-light>
@@ -225,7 +258,7 @@
       var bulletSpawn = document.querySelector('#bulletSpawn');
       var score = 0;
 
-gun.addEventListener('shoot', function () {
+      gun.addEventListener('shoot', function () {
         var bullet = document.createElement('a-sphere');
         bullet.setAttribute('dynamic-body', '');
         bullet.setAttribute('bullet', '');
