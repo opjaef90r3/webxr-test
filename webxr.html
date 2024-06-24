@@ -32,9 +32,9 @@
           const rotation = this.camera.object3D.rotation;
           
           // Apply camera Y rotation to movement
-          this.velocity.applyAxisAngle(new THREE.Vector3(0, 1, 0), rotation.y);
-          
-          const movement = this.velocity.clone().multiplyScalar(this.data.speed * deltaSeconds);
+          const direction = new THREE.Vector3(this.velocity.x, this.velocity.y, this.velocity.z);
+          direction.applyQuaternion(this.camera.object3D.quaternion);
+          const movement = direction.multiplyScalar(this.data.speed * deltaSeconds);
           
           this.el.object3D.position.add(movement);
           this.el.object3D.rotateY(this.rotation.y * deltaSeconds);
@@ -246,7 +246,6 @@
       <a-plane position="0 5 0" rotation="90 0 0" width="50" height="50" material="color: #111; metalness: 0.9; roughness: 0.1; emissive: #001a33; emissiveIntensity: 0.2"></a-plane>
 
       <!-- Lighting -->
-<!-- Lighting -->
       <a-light type="ambient" color="#0000ff" intensity="0.2"></a-light>
       <a-light type="directional" color="#00ffff" intensity="0.6" position="-1 1 1"></a-light>
       <a-light type="point" color="#ff00ff" intensity="0.4" position="5 5 -10"></a-light>
