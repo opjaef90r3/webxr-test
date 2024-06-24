@@ -64,26 +64,30 @@
 
         AFRAME.registerComponent('shooter', {
             init: function () {
-                this.el.addEventListener('triggerdown', () => {
-                    const bullet = document.createElement('a-sphere');
-                    bullet.setAttribute('radius', 0.05);
-                    bullet.setAttribute('color', 'yellow');
-                    bullet.setAttribute('position', this.el.getAttribute('position'));
-                    bullet.setAttribute('dynamic-body', 'shape: sphere; mass: 0.1');
-                    
-                    const muzzle = document.querySelector('#muzzle');
-                    const direction = new THREE.Vector3();
-                    muzzle.object3D.getWorldDirection(direction);
-                    bullet.setAttribute('velocity', direction.multiplyScalar(-10));
-                    
-                    this.el.sceneEl.appendChild(bullet);
+                const el = this.el;
 
-                    bullet.addEventListener('collide', (e) => {
-                        const target = e.detail.body.el;
-                        if (target && target.hasAttribute('dynamic-body')) {
-                            target.emit('hit');
-                            bullet.parentNode.removeChild(bullet);
-                        }
+                el.addEventListener('controllerconnected', () => {
+                    el.addEventListener('triggerdown', () => {
+                        const bullet = document.createElement('a-sphere');
+                        bullet.setAttribute('radius', 0.05);
+                        bullet.setAttribute('color', 'yellow');
+                        bullet.setAttribute('position', document.querySelector('#muzzle').object3D.position);
+                        bullet.setAttribute('dynamic-body', 'shape: sphere; mass: 0.1');
+                        
+                        const muzzle = document.querySelector('#muzzle');
+                        const direction = new THREE.Vector3();
+                        muzzle.object3D.getWorldDirection(direction);
+                        bullet.setAttribute('velocity', direction.multiplyScalar(-10));
+                        
+                        el.sceneEl.appendChild(bullet);
+
+                        bullet.addEventListener('collide', (e) => {
+                            const target = e.detail.body.el;
+                            if (target && target.hasAttribute('dynamic-body')) {
+                                target.emit('hit');
+                                bullet.parentNode.removeChild(bullet);
+                            }
+                        });
                     });
                 });
             }
