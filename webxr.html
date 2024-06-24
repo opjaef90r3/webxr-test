@@ -5,6 +5,45 @@
     <script src="https://cdn.jsdelivr.net/gh/n5ro/aframe-physics-system@v4.0.1/dist/aframe-physics-system.min.js"></script>
     <script src="https://unpkg.com/aframe-environment-component@1.3.2/dist/aframe-environment-component.min.js"></script>
     <script>
+      // Advanced movement component
+      AFRAME.registerComponent('advanced-movement', {
+        schema: {
+          speed: {type: 'number', default: 13},
+          rotationSpeed: {type: 'number', default: 4}
+        },
+        init: function () {
+          this.velocity = new THREE.Vector3();
+          this.rotation = new THREE.Euler();
+          
+          this.leftHand = document.querySelector('#leftHand');
+          this.rightHand = document.querySelector('#rightHand');
+          
+          this.leftHand.addEventListener('thumbstickmoved', this.onThumbstickMoved.bind(this));
+          this.rightHand.addEventListener('thumbstickmoved', this.onRotation.bind(this));
+        },
+        onThumbstickMoved: function (evt) {
+          const x = evt.detail.x;
+          const y = evt.detail.y;
+          this.velocity.set(x, 0, -y);
+        },
+        onRotation: function (evt) {
+          this.rotation.y = -evt.detail.x * this.data.rotationSpeed;
+        },
+        tick: function (time, timeDelta) {
+          const deltaSeconds = timeDelta / 1000;
+          const rotation = this.el.object3D.rotation;
+          
+          // Apply camera Y rotation to movement
+          this.velocity.applyAxisAngle(new THREE.Vector3(0, 1, 0), rotation.y);
+          
+          // Scale movement by speed and delta time
+          const movement = this.velocity.clone().multiplyScalar(this.data.speed * deltaSeconds);
+          
+          this.el.object3D.position.add(movement);
+          this.el.object3D.rotateY(this.rotation.y * deltaSeconds);
+        }
+      });
+
       // Gun component
       AFRAME.registerComponent('gun', {
         init: function () {
@@ -14,34 +53,18 @@
           this.lastShootTime = 0;
           this.ammo = 30;
           this.maxAmmo = 30;
-          this.isHeld = true;  // Start with the gun held
           this.el.addEventListener('triggerdown', this.onTriggerDown.bind(this));
           this.el.addEventListener('triggerup', this.onTriggerUp.bind(this));
           this.el.addEventListener('bbuttondown', this.toggleFireMode.bind(this));
-          this.el.addEventListener('gripdown', this.onGripDown.bind(this));
           this.updateAmmoDisplay();
         },
         onTriggerDown: function () {
-          if (this.isHeld) {
-            this.shooting = true;
-            this.shoot();
-          }
+          this.shooting = true;
+          this.shoot();
         },
         onTriggerUp: function () {
           this.shooting = false;
           this.burstCount = 0;
-        },
-        onGripDown: function () {
-          this.isHeld = !this.isHeld;
-          if (this.isHeld) {
-            document.querySelector('#rightHand').appendChild(this.el);
-            this.el.setAttribute('position', '0 0 -0.25');
-            this.el.setAttribute('rotation', '0 0 0');
-          } else {
-            document.querySelector('#gunHolder').appendChild(this.el);
-            this.el.setAttribute('position', '0.5 1 -0.5');
-            this.el.setAttribute('rotation', '0 0 0');
-          }
         },
         toggleFireMode: function () {
           const modes = ['semi', 'burst', 'auto'];
@@ -83,125 +106,175 @@
         }
       });
 
-      // Advanced movement component
-      AFRAME.registerComponent('advanced-movement', {
+      // Target component
+      AFRAME.registerComponent('target', {
         schema: {
-          speed: {type: 'number', default: 13},  // Reduced to about 1/3 of previous speed
-          rotationSpeed: {type: 'number', default: 4}  // Doubled rotation speed
+          health: {type: 'int', default: 100}
         },
         init: function () {
-          this.velocity = new THREE.Vector3();
-          this.rotation = new THREE.Euler();
-          
-          this.leftHand = document.querySelector('#leftHand');
-          this.rightHand = document.querySelector('#rightHand');
-          
-          this.leftHand.addEventListener('thumbstickmoved', this.onLeftThumbstickMoved.bind(this));
-          this.rightHand.addEventListener('thumbstickmoved', this.onRightThumbstickMoved.bind(this));
+          this.currentHealth = this.data.health;
+          this.el.addEventListener('hit', this.onHit.bind(this));
         },
-        onLeftThumbstickMoved: function (evt) {
-          this.velocity.x = -evt.detail.x * this.data.speed;  // Reversed x-axis
-          this.velocity.z = -evt.detail.y * this.data.speed;
-        },
-        onRightThumbstickMoved: function (evt) {
-          this.rotation.y = -evt.detail.x * this.data.rotationSpeed;
-        },
-        tick: function (time, timeDelta) {
-          const deltaSeconds = timeDelta / 1000;
-          const cameraRotation = this.el.querySelector('[camera]').object3D.rotation;
-          
-          const movementVector = new THREE.Vector3(this.velocity.x, 0, this.velocity.z);
-          movementVector.applyAxisAngle(new THREE.Vector3(0, 1, 0), cameraRotation.y);
-          
-          this.el.object3D.position.add(movementVector.multiplyScalar(deltaSeconds));
-          this.el.object3D.rotateY(this.rotation.y * deltaSeconds);
+        onHit: function (evt) {
+          this.currentHealth -= 10;
+          if (this.currentHealth <= 0) {
+            this.el.setAttribute('visible', 'false');
+            document.querySelector('#score').setAttribute('value', parseInt(document.querySelector('#score').getAttribute('value')) + 1);
+            setTimeout(() => {
+              this.currentHealth = this.data.health;
+              this.el.setAttribute('visible', 'true');
+            }, 2000);
+          } else {
+            this.el.setAttribute('material', 'color', 'red');
+            setTimeout(() => {
+              this.el.setAttribute('material', 'color', this.el.getAttribute('data-original-color'));
+            }, 100);
+          }
         }
       });
 
-      // Other components (target, bullet, sound-generator) remain the same
+      // Bullet component
+      AFRAME.registerComponent('bullet', {
+        init: function () {
+          this.el.addEventListener('collide', this.onCollide.bind(this));
+          setTimeout(() => {
+            if (this.el.parentNode) {
+              this.el.parentNode.removeChild(this.el);
+            }
+          }, 5000);
+        },
+        onCollide: function (evt) {
+          if (evt.detail.body.el.getAttribute('target')) {
+            evt.detail.body.el.emit('hit');
+          }
+          this.el.parentNode.removeChild(this.el);
+        }
+      });
     </script>
   </head>
   <body>
-    <a-scene physics="debug: true" sound-generator>
+    <a-scene physics="debug: true">
       <a-assets>
-        <a-asset-item id="anime-girl" src="https://cdn.glitch.global/your-project-id/anime-girl.glb"></a-asset-item>
+        <a-asset-item id="gun-model" src="https://cdn.aframe.io/examples/ar/models/steampunkGun/scene.gltf"></a-asset-item>
+        <a-asset-item id="target-model" src="https://cdn.aframe.io/examples/ar/models/spinningPig/scene.gltf"></a-asset-item>
       </a-assets>
 
       <!-- Player rig -->
-      <a-entity id="rig" position="0 0.8 0" advanced-movement="speed: 13; rotationSpeed: 4">
+      <a-entity id="rig" position="0 1.6 0" advanced-movement="speed: 13; rotationSpeed: 4">
         <a-entity camera look-controls position="0 0 0"></a-entity>
         <a-entity id="leftHand" oculus-touch-controls="hand: left"></a-entity>
         <a-entity id="rightHand" oculus-touch-controls="hand: right">
-          <!-- Gun is initially held in the right hand -->
-          <a-entity id="gun" gun position="0 0 -0.25">
-            <a-box material="color: #4d4d4d; metalness: 0.8; roughness: 0.2" depth="0.2" height="0.3" width="0.1"></a-box>
-            <a-cylinder material="color: #1a1a1a; metalness: 0.9; roughness: 0.1" radius="0.02" height="0.4" position="0 0.1 -0.25" rotation="90 0 0"></a-cylinder>
-            <a-box material="color: #4d4d4d; metalness: 0.8; roughness: 0.2" depth="0.05" height="0.15" width="0.1" position="0 -0.1 0.05"></a-box>
-            <a-entity id="bulletSpawn" position="0 0.15 -0.45"></a-entity>
-            <a-box material="color: #ff0000; emissive: #ff0000; emissiveIntensity: 0.5" depth="0.02" height="0.02" width="0.02" position="0 0.2 -0.1"></a-box>
-            <a-text value="LASER" position="0.06 0 0" rotation="0 -90 0" scale="0.1 0.1 0.1" color="#ff0000"></a-text>
+          <a-entity id="gun" gun gltf-model="#gun-model" position="0 -0.1 0" rotation="-45 0 0" scale="0.15 0.15 0.15">
+            <a-entity id="bulletSpawn" position="0 0.05 -0.3"></a-entity>
           </a-entity>
         </a-entity>
       </a-entity>
 
-      <!-- Gun holder (when not held) -->
-      <a-entity id="gunHolder" position="0.5 1 -0.5"></a-entity>
+      <!-- Maze-like environment -->
+      <a-entity id="maze">
+        <!-- Outer walls -->
+        <a-box position="0 2.5 -25" width="50" height="5" depth="1" material="color: #8B4513"></a-box>
+        <a-box position="0 2.5 25" width="50" height="5" depth="1" material="color: #8B4513"></a-box>
+        <a-box position="-25 2.5 0" width="1" height="5" depth="50" material="color: #8B4513"></a-box>
+        <a-box position="25 2.5 0" width="1" height="5" depth="50" material="color: #8B4513"></a-box>
 
-      <!-- Environment -->
-      <a-entity environment="preset: tron; groundColor: #0a0a0a; groundColor2: #0f0f0f; groundTexture: walkernoise; grid: 2x2; gridColor: #00ffff; horizonColor: #003366; skyColor: #000033; lighting: distant; lightPosition: 1 5 -2; fog: 0.7; dressing: towers; dressingAmount: 30; dressingColor: #00ffff; dressingScale: 30; dressingVariance: 10 10 10; dressingUniformScale: true; playArea: 50"></a-entity>
+        <!-- Inner walls -->
+        <a-box position="-10 2.5 -15" width="20" height="5" depth="1" material="color: #8B4513"></a-box>
+        <a-box position="10 2.5 15" width="20" height="5" depth="1" material="color: #8B4513"></a-box>
+        <a-box position="-15 2.5 10" width="1" height="5" depth="20" material="color: #8B4513"></a-box>
+        <a-box position="15 2.5 -10" width="1" height="5" depth="20" material="color: #8B4513"></a-box>
+      </a-entity>
 
       <!-- Targets -->
       <a-entity id="targetGroup">
-        <!-- Regular geometric targets -->
-        <a-box class="target" target="health: 100" position="-10 1.5 -20" depth="0.5" height="0.5" width="0.5" material="color: #00ff00; emissive: #00ff00; emissiveIntensity: 0.2" animation="property: position; to: -10 1.5 -25; dir: alternate; dur: 5000; loop: true" data-original-color="#00ff00"></a-box>
-        <a-sphere class="target" target="health: 150" position="0 2 -30" radius="0.4" material="color: #ff00ff; emissive: #ff00ff; emissiveIntensity: 0.2" animation="property: position; to: 0 2 -35; dir: alternate; dur: 4000; loop: true" data-original-color="#ff00ff"></a-sphere>
-        <a-cylinder class="target" target="health: 200" position="10 1 -25" radius="0.3" height="1" material="color: #ffff00; emissive: #ffff00; emissiveIntensity: 0.2" animation="property: rotation; to: 0 360 0; dur: 3000; loop: true" data-original-color="#ffff00"></a-cylinder>
-
-        <!-- Anime girl target -->
-        <a-entity class="target" target="health: 300" gltf-model="#anime-girl" position="-5 0 -15" scale="0.5 0.5 0.5" animation="property: rotation; to: 0 360 0; dur: 10000; loop: true"></a-entity>
+        <a-entity class="target" target="health: 100" gltf-model="#target-model" position="-20 0 -20" scale="0.5 0.5 0.5" animation="property: rotation; to: 0 360 0; dur: 10000; loop: true"></a-entity>
+        <a-entity class="target" target="health: 100" gltf-model="#target-model" position="20 0 20" scale="0.5 0.5 0.5" animation="property: rotation; to: 0 360 0; dur: 10000; loop: true"></a-entity>
+        <a-entity class="target" target="health: 100" gltf-model="#target-model" position="-20 0 20" scale="0.5 0.5 0.5" animation="property: rotation; to: 0 360 0; dur: 10000; loop: true"></a-entity>
+        <a-entity class="target" target="health: 100" gltf-model="#target-model" position="20 0 -20" scale="0.5 0.5 0.5" animation="property: rotation; to: 0 360 0; dur: 10000; loop: true"></a-entity>
       </a-entity>
+
+      <!-- Floor -->
+      <a-plane position="0 0 0" rotation="-90 0 0" width="50" height="50" material="src: https://cdn.aframe.io/a-painter/images/floor.jpg; repeat: 50 50"></a-plane>
+
+      <!-- Ceiling -->
+      <a-plane position="0 5 0" rotation="90 0 0" width="50" height="50" material="color: #87CEEB"></a-plane>
+
+      <!-- Lighting -->
+      <a-light type="ambient" color="#ffffff" intensity="0.5"></a-light>
+      <a-light type="directional" color="#ffffff" intensity="0.8" position="-1 1 1"></a-light>
 
       <!-- UI Elements -->
       <a-text id="score" value="Score: 0" position="-0.75 1.5 -2" scale="0.5 0.5 0.5" color="white"></a-text>
       <a-text id="ammoDisplay" value="Ammo: 30/30" position="0.75 1.5 -2" scale="0.5 0.5 0.5" color="white"></a-text>
       <a-text id="modeDisplay" value="Mode: Semi" position="0 1.7 -2" scale="0.5 0.5 0.5" color="white"></a-text>
-
-      <!-- Lighting -->
-      <a-light type="ambient" color="#ffffff" intensity="0.2"></a-light>
-      <a-light type="directional" color="#00ffff" intensity="0.6" position="-1 1 1"></a-light>
-      <a-light type="point" color="#ff00ff" intensity="0.4" position="5 5 -10"></a-light>
-
-      <!-- Particle systems for visual effects -->
-      <a-entity position="0 10 -30" particle-system="preset: dust; particleCount: 5000; size: 0.5; color: #44ffff,#44ccff; accelerationValue: 0 -9.8 0; velocityValue: 0 15 0; velocitySpread: 10 7.5 10;"></a-entity>
     </a-scene>
 
     <script>
-      // ... (previous script content remains the same)
+      var scene = document.querySelector('a-scene');
+      var gun = document.querySelector('#gun');
+      var bulletSpawn = document.querySelector('#bulletSpawn');
+      var score = 0;
 
-      function spawnNewTarget() {
-        var shapes = ['a-box', 'a-sphere', 'a-cylinder', 'a-entity'];
-        var shape = shapes[Math.floor(Math.random() * shapes.length)];
-        var target = document.createElement(shape);
+      gun.addEventListener('shoot', function () {
+        var bullet = document.createElement('a-sphere');
+        bullet.setAttribute('dynamic-body', '');
+        bullet.setAttribute('bullet', '');
+        bullet.setAttribute('radius', '0.05');
+        bullet.setAttribute('material', 'color: #ffff00; emissive: #ffff00; emissiveIntensity: 0.5');
         
-        target.setAttribute('class', 'target');
-        target.setAttribute('target', `health: ${100 + Math.floor(score / 100)}`);
-        target.setAttribute('position', `${Math.random()*40-20} ${Math.random()*5+1} ${-30-Math.random()*30}`);
+        var pos = new THREE.Vector3();
+        var rot = new THREE.Quaternion();
+        bulletSpawn.object3D.getWorldPosition(pos);
+        bulletSpawn.object3D.getWorldQuaternion(rot);
+
+        bullet.setAttribute('position', pos);
         
-        if (shape === 'a-entity') {
-          // Anime girl target
-          target.setAttribute('gltf-model', '#anime-girl');
-          target.setAttribute('scale', '0.5 0.5 0.5');
-          target.setAttribute('animation', 'property: rotation; to: 0 360 0; dur: 10000; loop: true');
-        } else {
-          // Geometric targets
-          target.setAttribute('material', `color: #${Math.floor(Math.random()*16777215).toString(16)}; emissive: #${Math.floor(Math.random()*16777215).toString(16)}; emissiveIntensity: 0.2`);
-          target.setAttribute('animation', 'property: position; to: ' + target.getAttribute('position').x + ' ' + (parseFloat(target.getAttribute('position').y) + 2) + ' ' + target.getAttribute('position').z + '; dir: alternate; dur: ' + (2000 + Math.random() * 3000) + '; loop: true');
-        }
-        
-        document.querySelector('#targetGroup').appendChild(target);
+        var direction = new THREE.Vector3(0, 0, -1);
+        direction.applyQuaternion(rot);
+        direction.multiplyScalar(50);
+
+        bullet.setAttribute('velocity', direction);
+        scene.appendChild(bullet);
+      });
+
+      scene.addEventListener('hit', function () {
+        score += 10;
+        document.querySelector('#score').setAttribute('value', `Score: ${score}`);
+      });
+
+      // Reload function
+      function reload() {
+        var gunComponent = gun.components.gun;
+        gunComponent.ammo = gunComponent.maxAmmo;
+        gunComponent.updateAmmoDisplay();
+        console.log('Reloaded');
       }
 
-      // ... (rest of the script remains the same)
+      // Add reload on 'Y' button press
+      document.querySelector('#rightHand').addEventListener('ybuttondown', reload);
+
+      // Update fire mode display
+      gun.addEventListener('componentchanged', function(evt) {
+        if (evt.detail.name === 'gun') {
+          document.querySelector('#modeDisplay').setAttribute('value', `Mode: ${evt.detail.newData.currentFireMode}`);
+        }
+      });
+
+      // Add some basic game loop logic
+      var gameLoop = setInterval(function() {
+        // Respawn targets that are not visible
+        document.querySelectorAll('.target').forEach(function(target) {
+          if (!target.getAttribute('visible')) {
+            target.setAttribute('visible', 'true');
+            target.components.target.currentHealth = target.components.target.data.health;
+          }
+        });
+
+        // You could add more game logic here, such as:
+        // - Spawning new targets
+        // - Updating difficulty based on score
+        // - Checking win/lose conditions
+      }, 5000);  // Run every 5 seconds
     </script>
   </body>
 </html>
