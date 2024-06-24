@@ -23,7 +23,7 @@
     <script src="https://cdn.jsdelivr.net/npm/webxr-polyfill@latest/build/webxr-polyfill.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three/examples/js/loaders/GLTFLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three/examples/js/controls/VRControls.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three/examples/js/controls/VRButton.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three/examples/js/webxr/VRButton.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three/examples/js/renderers/WebGLRenderer.js"></script>
     <script>
         let scene, camera, renderer, controller1, controller2;
@@ -144,18 +144,18 @@
                     scene.remove(bullet);
                     bullets.splice(i, 1);
                     i--;
+                }
 
-                    // 弾とボックスの衝突検出
-                    for (let j = 0; j < boxes.length; j++) {
-                        const box = boxes[j];
-                        if (!box.userData.hit && bullet.position.distanceTo(box.position) < 0.5) {
-                            box.userData.hit = true;
-                            scene.remove(box);
-                            boxes.splice(j, 1);
-                            score++;
-                            document.getElementById('score').innerText = score;
-                            break;
-                        }
+                // 弾とボックスの衝突検出
+                for (let j = 0; j < boxes.length; j++) {
+                    const box = boxes[j];
+                    if (!box.userData.hit && bullet.position.distanceTo(box.position) < 0.5) {
+                        box.userData.hit = true;
+                        scene.remove(box);
+                        boxes.splice(j, 1);
+                        score++;
+                        document.getElementById('score').innerText = score;
+                        break;
                     }
                 }
             }
