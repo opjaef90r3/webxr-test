@@ -19,12 +19,11 @@
 </head>
 <body>
     <div class="hud">Score: <span id="score">0</span></div>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r122/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r136/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/webxr-polyfill@latest/build/webxr-polyfill.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three/examples/js/loaders/GLTFLoader.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three/examples/js/controls/VRControls.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three/examples/js/webxr/VRButton.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three/examples/js/renderers/WebGLRenderer.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r136/examples/js/loaders/GLTFLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r136/examples/js/controls/VRControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/mrdoob/three.js@r136/examples/js/webxr/VRButton.js"></script>
     <script>
         let scene, camera, renderer, controller1, controller2;
         let score = 0;
@@ -65,109 +64,4 @@
 
         let gun;
         const loader = new THREE.GLTFLoader();
-        loader.load('models/scene.gltf', function (gltf) {
-            gun = gltf.scene;
-            gun.scale.set(0.05, 0.05, 0.05);
-            gun.position.set(0, -0.2, -0.5); // 手の位置に合わせて調整
-            controller1.add(gun); // コントローラーに追加
-        }, undefined, function (error) {
-            console.error(error);
-        });
-
-        function onSelectStart(event) {
-            // 弾の発射
-            const bullet = new THREE.Mesh(
-                new THREE.SphereGeometry(0.05, 8, 8),
-                new THREE.MeshBasicMaterial({ color: 0xffff00 })
-            );
-            const controller = event.target;
-            bullet.position.setFromMatrixPosition(gun.matrixWorld); // 銃口の位置から発射
-            const direction = new THREE.Vector3(0, 0, -1).applyQuaternion(controller.quaternion);
-            bullet.velocity = direction.multiplyScalar(10);
-            scene.add(bullet);
-
-            bullet.userData = { life: 0 };
-            bullets.push(bullet);
-        }
-
-        function onSelectEnd(event) {
-            // ここには必要に応じて処理を追加
-        }
-
-        // 床の追加
-        const floorGeometry = new THREE.PlaneGeometry(20, 20);
-        const floorMaterial = new THREE.MeshStandardMaterial({ color: 0x7BC8A4 });
-        const floor = new THREE.Mesh(floorGeometry, floorMaterial);
-        floor.rotation.x = -Math.PI / 2;
-        scene.add(floor);
-
-        // ボックスの追加
-        function createBox(position) {
-            const boxGeometry = new THREE.BoxGeometry(1, 1, 1);
-            const boxMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000 });
-            const box = new THREE.Mesh(boxGeometry, boxMaterial);
-            box.position.copy(position);
-            box.userData = { hit: false };
-            scene.add(box);
-            boxes.push(box);
-        }
-
-        createBox(new THREE.Vector3(3, 1.5, -3));
-        createBox(new THREE.Vector3(-3, 1.5, -3));
-        createBox(new THREE.Vector3(0, 1.5, -6));
-
-        // アニメーションループ
-        function animate() {
-            renderer.setAnimationLoop(render);
-        }
-
-        // レンダリング
-        function render() {
-            const delta = clock.getDelta();
-            updateBullets(delta);
-            renderer.render(scene, camera);
-        }
-
-        const bullets = [];
-        const boxes = [];
-        const clock = new THREE.Clock();
-
-        // 弾の更新
-        function updateBullets(delta) {
-            for (let i = 0; i < bullets.length; i++) {
-                const bullet = bullets[i];
-                bullet.position.add(bullet.velocity.clone().multiplyScalar(delta));
-                bullet.userData.life += delta;
-
-                // 弾の寿命が尽きた場合、削除
-                if (bullet.userData.life > 2) {
-                    scene.remove(bullet);
-                    bullets.splice(i, 1);
-                    i--;
-                }
-
-                // 弾とボックスの衝突検出
-                for (let j = 0; j < boxes.length; j++) {
-                    const box = boxes[j];
-                    if (!box.userData.hit && bullet.position.distanceTo(box.position) < 0.5) {
-                        box.userData.hit = true;
-                        scene.remove(box);
-                        boxes.splice(j, 1);
-                        score++;
-                        document.getElementById('score').innerText = score;
-                        break;
-                    }
-                }
-            }
-        }
-
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
-
-        animate();
-    </script>
-</body>
-</html>
+        loader.load('models/scene.gltf', func
