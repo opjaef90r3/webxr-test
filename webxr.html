@@ -7,30 +7,22 @@
       // Advanced movement component
       AFRAME.registerComponent('advanced-movement', {
         schema: {
-          speed: {type: 'number', default: 13},
-          rotationSpeed: {type: 'number', default: 4}
+          speed: {type: 'number', default: 13}
         },
         init: function () {
           this.velocity = new THREE.Vector3();
-          this.rotation = new THREE.Euler();
-          
           this.leftHand = document.querySelector('#leftHand');
-          this.rightHand = document.querySelector('#rightHand');
-          
           this.leftHand.addEventListener('thumbstickmoved', this.onThumbstickMoved.bind(this));
-          this.rightHand.addEventListener('thumbstickmoved', this.onRotation.bind(this));
         },
         onThumbstickMoved: function (evt) {
           const x = evt.detail.x;
           const y = evt.detail.y;
           this.velocity.set(x, 0, -y);
         },
-        onRotation: function (evt) {
-          this.rotation.y = -evt.detail.x * this.data.rotationSpeed;
-        },
         tick: function (time, timeDelta) {
           const deltaSeconds = timeDelta / 1000;
-          const rotation = this.el.querySelector('[camera]').object3D.rotation;
+          const cameraEl = this.el.querySelector('[camera]');
+          const rotation = cameraEl.object3D.rotation;
           
           // Apply camera Y rotation to movement
           this.velocity.applyAxisAngle(new THREE.Vector3(0, 1, 0), rotation.y);
@@ -39,7 +31,6 @@
           const movement = this.velocity.clone().multiplyScalar(this.data.speed * deltaSeconds);
           
           this.el.object3D.position.add(movement);
-          this.el.object3D.rotateY(this.rotation.y * deltaSeconds);
         }
       });
 
@@ -52,18 +43,22 @@
           this.lastShootTime = 0;
           this.ammo = 30;
           this.maxAmmo = 30;
-          this.el.addEventListener('triggerdown', this.onTriggerDown.bind(this));
-          this.el.addEventListener('triggerup', this.onTriggerUp.bind(this));
-          this.el.addEventListener('bbuttondown', this.toggleFireMode.bind(this));
+          this.el.sceneEl.addEventListener('triggerdown', this.onTriggerDown.bind(this));
+          this.el.sceneEl.addEventListener('triggerup', this.onTriggerUp.bind(this));
+          this.el.sceneEl.addEventListener('bbuttondown', this.toggleFireMode.bind(this));
           this.updateAmmoDisplay();
         },
-        onTriggerDown: function () {
-          this.shooting = true;
-          this.shoot();
+        onTriggerDown: function (evt) {
+          if (evt.target.id === 'rightHand') {
+            this.shooting = true;
+            this.shoot();
+          }
         },
-        onTriggerUp: function () {
-          this.shooting = false;
-          this.burstCount = 0;
+        onTriggerUp: function (evt) {
+          if (evt.target.id === 'rightHand') {
+            this.shooting = false;
+            this.burstCount = 0;
+          }
         },
         toggleFireMode: function () {
           const modes = ['semi', 'burst', 'auto'];
@@ -154,7 +149,7 @@
   <body>
     <a-scene physics="debug: true">
       <!-- Player rig -->
-      <a-entity id="rig" position="0 1.6 0" advanced-movement="speed: 13; rotationSpeed: 4">
+      <a-entity id="rig" position="0 1.6 0" advanced-movement="speed: 13">
         <a-entity camera look-controls position="0 0 0"></a-entity>
         <a-entity id="leftHand" oculus-touch-controls="hand: left"></a-entity>
         <a-entity id="rightHand" oculus-touch-controls="hand: right">
@@ -183,10 +178,10 @@
 
       <!-- Targets -->
       <a-entity id="targetGroup">
-        <a-box class="target" target="health: 100" position="-20 1.5 -20" width="1" height="1" depth="1" color="blue" animation="property: rotation; to: 0 360 0; dur: 10000; loop: true"></a-box>
-        <a-sphere class="target" target="health: 100" position="20 1.5 20" radius="0.5" color="green" animation="property: position; to: 20 3 20; dir: alternate; dur: 2000; loop: true"></a-sphere>
-        <a-cylinder class="target" target="health: 100" position="-20 1.5 20" radius="0.5" height="1" color="yellow" animation="property: scale; to: 1.2 1.2 1.2; dir: alternate; dur: 1000; loop: true"></a-cylinder>
-        <a-cone class="target" target="health: 100" position="20 1.5 -20" radius-bottom="0.5" height="1" color="red" animation="property: rotation; to: 360 360 0; dur: 5000; loop: true"></a-cone>
+        <a-box class="target" target="health: 100" position="-20 1.5 -20" width="1" height="1" depth="1" color="blue" animation="property: rotation; to: 0 360 0; dur: 10000; loop: true" data-original-color="blue"></a-box>
+        <a-sphere class="target" target="health: 100" position="20 1.5 20" radius="0.5" color="green" animation="property: position; to: 20 3 20; dir: alternate; dur: 2000; loop: true" data-original-color="green"></a-sphere>
+        <a-cylinder class="target" target="health: 100" position="-20 1.5 20" radius="0.5" height="1" color="yellow" animation="property: scale; to: 1.2 1.2 1.2; dir: alternate; dur: 1000; loop: true" data-original-color="yellow"></a-cylinder>
+        <a-cone class="target" target="health: 100" position="20 1.5 -20" radius-bottom="0.5" height="1" color="red" animation="property: rotation; to: 360 360 0; dur: 5000; loop: true" data-original-color="red"></a-cone>
       </a-entity>
 
       <!-- Floor -->
