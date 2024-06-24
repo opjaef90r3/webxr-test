@@ -34,17 +34,47 @@
           });
         }
       });
+
+      AFRAME.registerComponent('sound-generator', {
+        init: function () {
+          this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        },
+        playShootSound: function () {
+          const oscillator = this.audioContext.createOscillator();
+          oscillator.type = 'square';
+          oscillator.frequency.setValueAtTime(440, this.audioContext.currentTime);
+          
+          const gainNode = this.audioContext.createGain();
+          gainNode.gain.setValueAtTime(1, this.audioContext.currentTime);
+          gainNode.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 0.2);
+          
+          oscillator.connect(gainNode);
+          gainNode.connect(this.audioContext.destination);
+          
+          oscillator.start();
+          oscillator.stop(this.audioContext.currentTime + 0.2);
+        },
+        playHitSound: function () {
+          const oscillator = this.audioContext.createOscillator();
+          oscillator.type = 'sine';
+          oscillator.frequency.setValueAtTime(880, this.audioContext.currentTime);
+          
+          const gainNode = this.audioContext.createGain();
+          gainNode.gain.setValueAtTime(0.5, this.audioContext.currentTime);
+          gainNode.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 0.1);
+          
+          oscillator.connect(gainNode);
+          gainNode.connect(this.audioContext.destination);
+          
+          oscillator.start();
+          oscillator.stop(this.audioContext.currentTime + 0.1);
+        }
+      });
     </script>
   </head>
   <body>
-    <a-scene physics="debug: true">
-      <a-assets>
-        <audio id="shoot-sound" src="https://freesound.org/data/previews/328/328862_5394401-lq.mp3" crossorigin="anonymous"></audio>
-        <audio id="hit-sound" src="https://freesound.org/data/previews/131/131657_2398403-lq.mp3" crossorigin="anonymous"></audio>
-        <a-asset-item id="gun-model" src="https://cdn.glitch.com/f8abb766-9950-44ff-9adb-2f5f53fdaf1b%2FPistol_1.glb?1552801013426" crossorigin="anonymous"></a-asset-item>
-      </a-assets>
-
-      <a-entity id="rig" movement-controls position="0 1.6 0">
+    <a-scene physics="debug: true" sound-generator>
+      <a-entity id="rig" movement-controls="fly: true; speed: 0.2" position="0 1.6 0">
         <a-entity camera look-controls>
           <a-entity cursor="fuse: true; fuseTimeout: 500"
                     position="0 0 -1"
@@ -55,16 +85,16 @@
         </a-entity>
         <a-entity id="gun"
                   gun
-                  gltf-model="#gun-model"
                   position="0.5 -0.5 -0.5"
-                  rotation="-10 -90 0"
-                  scale="0.05 0.05 0.05">
+                  rotation="-10 -90 0">
+          <a-box color="gray" depth="0.2" height="0.2" width="0.5"></a-box>
+          <a-cylinder color="darkgray" radius="0.05" height="0.3" position="0 0 -0.25"></a-cylinder>
         </a-entity>
       </a-entity>
 
       <a-box id="target" class="raycastable" target position="0 1.6 -4" depth="0.5" height="0.5" width="0.5" color="red"></a-box>
 
-      <a-plane position="0 0 -4" rotation="-90 0 0" width="4" height="4" color="#7BC8A4"></a-plane>
+      <a-plane position="0 0 -4" rotation="-90 0 0" width="30" height="30" color="#7BC8A4"></a-plane>
       <a-sky color="#ECECEC"></a-sky>
 
       <a-text id="score" value="0" position="-0.75 1.5 -2"></a-text>
@@ -75,8 +105,7 @@
     <script>
       var scene = document.querySelector('a-scene');
       var gun = document.querySelector('#gun');
-      var shootSound = document.querySelector('#shoot-sound');
-      var hitSound = document.querySelector('#hit-sound');
+      var soundGenerator = scene.components['sound-generator'];
 
       gun.addEventListener('shoot', function () {
         var bullet = document.createElement('a-sphere');
@@ -93,12 +122,12 @@
         bullet.setAttribute('rotation', rot);
         bullet.setAttribute('velocity', new THREE.Vector3(0, 0, -30));
         scene.appendChild(bullet);
-        shootSound.play();
+        soundGenerator.playShootSound();
       });
 
       var target = document.querySelector('#target');
       target.addEventListener('hit', function () {
-        hitSound.play();
+        soundGenerator.playHitSound();
       });
     </script>
   </body>
