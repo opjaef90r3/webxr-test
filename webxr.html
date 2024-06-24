@@ -1,204 +1,102 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>VR FPS Game with Three.js</title>
-    <style>
-        body { margin: 0; }
-        canvas { display: block; }
-        .hud {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            color: white;
-            font-size: 24px;
-            z-index: 999;
-        }
-    </style>
-</head>
-<body>
-    <div class="hud">Score: <span id="score">0</span></div>
+<html>
+  <head>
+    <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/n5ro/aframe-physics-system@v4.0.1/dist/aframe-physics-system.min.js"></script>
     <script>
-        // スクリプトの動的読み込み関数
-        function loadScript(url) {
-            return new Promise((resolve, reject) => {
-                const script = document.createElement('script');
-                script.src = url;
-                script.onload = resolve;
-                script.onerror = reject;
-                document.head.appendChild(script);
-            });
+      AFRAME.registerComponent('gun', {
+        init: function () {
+          this.el.addEventListener('click', function (evt) {
+            this.emit('shoot');
+          });
         }
+      });
 
-        // 必要なスクリプトを順番に読み込む
-        Promise.all([
-            loadScript('https://cdnjs.cloudflare.com/ajax/libs/three.js/r136/three.min.js'),
-            loadScript('https://cdn.jsdelivr.net/npm/webxr-polyfill@latest/build/webxr-polyfill.min.js')
-        ]).then(() => {
-            return Promise.all([
-                loadScript('https://cdn.jsdelivr.net/gh/mrdoob/three.js@r136/examples/js/loaders/GLTFLoader.js'),
-                loadScript('https://cdn.jsdelivr.net/gh/mrdoob/three.js@r136/examples/js/webxr/VRButton.js')
-            ]);
-        }).then(() => {
-            // すべてのスクリプトが読み込まれた後にゲームを初期化
-            initGame();
-        }).catch(error => {
-            console.error('Script loading error:', error);
-        });
-
-        function initGame() {
-            if (typeof THREE === 'undefined') {
-                console.error('Three.js is not loaded');
-                return;
-            }
-
-            let scene, camera, renderer, controller1, controller2;
-            let score = 0;
-            let gun;
-            const bullets = [];
-            const boxes = [];
-            const clock = new THREE.Clock();
-
-            function init() {
-                scene = new THREE.Scene();
-                camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-                camera.position.set(0, 1.6, 3);
-
-                renderer = new THREE.WebGLRenderer({ antialias: true });
-                renderer.setSize(window.innerWidth, window.innerHeight);
-                renderer.xr.enabled = true;
-                document.body.appendChild(renderer.domElement);
-
-                // VRボタンの追加
-                document.body.appendChild(VRButton.createButton(renderer));
-
-                // 照明の追加
-                const light = new THREE.HemisphereLight(0xffffff, 0x444444);
-                light.position.set(0, 1, 0);
-                scene.add(light);
-
-                const light2 = new THREE.DirectionalLight(0xffffff);
-                light2.position.set(0, 1, 0);
-                scene.add(light2);
-
-                // コントローラーのセットアップ
-                controller1 = renderer.xr.getController(0);
-                controller1.addEventListener('selectstart', onSelectStart);
-                controller1.addEventListener('selectend', onSelectEnd);
-                scene.add(controller1);
-
-                controller2 = renderer.xr.getController(1);
-                controller2.addEventListener('selectstart', onSelectStart);
-                controller2.addEventListener('selectend', onSelectEnd);
-                scene.add(controller2);
-
-                loadGun();
-                createFloor();
-                createBoxes();
-
-                window.addEventListener('resize', onWindowResize);
-            }
-
-            function loadGun() {
-                const loader = new THREE.GLTFLoader();
-                loader.load('https://cdn.jsdelivr.net/gh/mrdoob/three.js@r136/examples/models/gltf/Soldier.glb', function (gltf) {
-                    gun = gltf.scene;
-                    gun.scale.set(0.05, 0.05, 0.05);
-                    gun.position.set(0, -0.2, -0.5);
-                    controller1.add(gun);
-                }, undefined, function (error) {
-                    console.error(error);
-                });
-            }
-
-            function onSelectStart(event) {
-                const bullet = new THREE.Mesh(
-                    new THREE.SphereGeometry(0.05, 8, 8),
-                    new THREE.MeshBasicMaterial({ color: 0xffff00 })
-                );
-                bullet.position.setFromMatrixPosition(event.target.matrixWorld);
-                const direction = new THREE.Vector3(0, 0, -1).applyQuaternion(event.target.quaternion);
-                bullet.velocity = direction.multiplyScalar(10);
-                scene.add(bullet);
-
-                bullet.userData = { life: 0 };
-                bullets.push(bullet);
-            }
-
-            function onSelectEnd(event) {
-                // ここには必要に応じて処理を追加
-            }
-
-            function createFloor() {
-                const floorGeometry = new THREE.PlaneGeometry(20, 20);
-                const floorMaterial = new THREE.MeshStandardMaterial({ color: 0x7BC8A4 });
-                const floor = new THREE.Mesh(floorGeometry, floorMaterial);
-                floor.rotation.x = -Math.PI / 2;
-                scene.add(floor);
-            }
-
-            function createBox(position) {
-                const boxGeometry = new THREE.BoxGeometry(1, 1, 1);
-                const boxMaterial = new THREE.MeshStandardMaterial({ color: 0xff0000 });
-                const box = new THREE.Mesh(boxGeometry, boxMaterial);
-                box.position.copy(position);
-                box.userData = { hit: false };
-                scene.add(box);
-                boxes.push(box);
-            }
-
-            function createBoxes() {
-                createBox(new THREE.Vector3(3, 1.5, -3));
-                createBox(new THREE.Vector3(-3, 1.5, -3));
-                createBox(new THREE.Vector3(0, 1.5, -6));
-            }
-
-            function onWindowResize() {
-                camera.aspect = window.innerWidth / window.innerHeight;
-                camera.updateProjectionMatrix();
-                renderer.setSize(window.innerWidth, window.innerHeight);
-            }
-
-            function updateBullets(delta) {
-                for (let i = 0; i < bullets.length; i++) {
-                    const bullet = bullets[i];
-                    bullet.position.add(bullet.velocity.clone().multiplyScalar(delta));
-                    bullet.userData.life += delta;
-
-                    if (bullet.userData.life > 2) {
-                        scene.remove(bullet);
-                        bullets.splice(i, 1);
-                        i--;
-                    }
-
-                    for (let j = 0; j < boxes.length; j++) {
-                        const box = boxes[j];
-                        if (!box.userData.hit && bullet.position.distanceTo(box.position) < 0.5) {
-                            box.userData.hit = true;
-                            scene.remove(box);
-                            boxes.splice(j, 1);
-                            score++;
-                            document.getElementById('score').innerText = score;
-                            break;
-                        }
-                    }
-                }
-            }
-
-            function animate() {
-                renderer.setAnimationLoop(render);
-            }
-
-            function render() {
-                const delta = clock.getDelta();
-                updateBullets(delta);
-                renderer.render(scene, camera);
-            }
-
-            init();
-            animate();
+      AFRAME.registerComponent('target', {
+        init: function () {
+          this.el.addEventListener('hit', function (evt) {
+            this.setAttribute('visible', 'false');
+            document.querySelector('#score').setAttribute('value', parseInt(document.querySelector('#score').getAttribute('value')) + 1);
+            setTimeout(() => {
+              this.setAttribute('visible', 'true');
+            }, 2000);
+          });
         }
+      });
+
+      AFRAME.registerComponent('bullet', {
+        init: function () {
+          this.el.addEventListener('collide', function (evt) {
+            if (evt.detail.body.el.id === 'target') {
+              evt.detail.body.el.emit('hit');
+            }
+            this.el.parentNode.removeChild(this.el);
+          });
+        }
+      });
     </script>
-</body>
+  </head>
+  <body>
+    <a-scene physics="debug: true">
+      <a-assets>
+        <audio id="shoot-sound" src="https://cdn.aframe.io/basic-guide/audio/shoot.ogg"></audio>
+        <audio id="hit-sound" src="https://cdn.aframe.io/basic-guide/audio/hit.ogg"></audio>
+      </a-assets>
+
+      <a-entity id="rig" movement-controls position="0 1.6 0">
+        <a-entity camera look-controls>
+          <a-entity cursor="fuse: true; fuseTimeout: 500"
+                    position="0 0 -1"
+                    geometry="primitive: ring; radiusInner: 0.02; radiusOuter: 0.03"
+                    material="color: black; shader: flat">
+          </a-entity>
+        </a-entity>
+        <a-entity id="gun"
+                  gun
+                  gltf-model="https://cdn.aframe.io/test-models/models/glTF-2.0/virtualcity/pistol.gltf"
+                  position="0.5 -0.5 -0.5"
+                  rotation="-10 -90 0"
+                  scale="0.05 0.05 0.05">
+        </a-entity>
+      </a-entity>
+
+      <a-box id="target" target position="0 1.6 -4" depth="0.5" height="0.5" width="0.5" color="red"></a-box>
+
+      <a-plane position="0 0 -4" rotation="-90 0 0" width="4" height="4" color="#7BC8A4"></a-plane>
+      <a-sky color="#ECECEC"></a-sky>
+
+      <a-text id="score" value="0" position="-0.75 1.5 -2"></a-text>
+
+      <a-entity position="0 2.25 -15" particle-system="preset: snow"></a-entity>
+    </a-scene>
+
+    <script>
+      var scene = document.querySelector('a-scene');
+      var gun = document.querySelector('#gun');
+      var shootSound = document.querySelector('#shoot-sound');
+      var hitSound = document.querySelector('#hit-sound');
+
+      gun.addEventListener('shoot', function () {
+        var bullet = document.createElement('a-sphere');
+        bullet.setAttribute('dynamic-body', '');
+        bullet.setAttribute('bullet', '');
+        bullet.setAttribute('radius', '0.1');
+        bullet.setAttribute('color', 'black');
+        var pos = new THREE.Vector3();
+        var rot = new THREE.Euler();
+        gun.object3D.getWorldPosition(pos);
+        gun.object3D.getWorldRotation(rot);
+        bullet.setAttribute('position', pos);
+        bullet.setAttribute('rotation', rot);
+        bullet.setAttribute('velocity', new THREE.Vector3(0, 0, -30));
+        scene.appendChild(bullet);
+        shootSound.play();
+      });
+
+      var target = document.querySelector('#target');
+      target.addEventListener('hit', function () {
+        hitSound.play();
+      });
+    </script>
+  </body>
 </html>
