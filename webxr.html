@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
     <script src="https://cdn.jsdelivr.net/gh/n5ro/aframe-physics-system@v4.0.1/dist/aframe-physics-system.min.js"></script>
     <script>
       AFRAME.registerComponent('gun', {
@@ -39,8 +39,9 @@
   <body>
     <a-scene physics="debug: true">
       <a-assets>
-        <audio id="shoot-sound" src="https://cdn.aframe.io/basic-guide/audio/shoot.ogg"></audio>
-        <audio id="hit-sound" src="https://cdn.aframe.io/basic-guide/audio/hit.ogg"></audio>
+        <audio id="shoot-sound" src="https://freesound.org/data/previews/328/328862_5394401-lq.mp3" crossorigin="anonymous"></audio>
+        <audio id="hit-sound" src="https://freesound.org/data/previews/131/131657_2398403-lq.mp3" crossorigin="anonymous"></audio>
+        <a-asset-item id="gun-model" src="https://cdn.glitch.com/f8abb766-9950-44ff-9adb-2f5f53fdaf1b%2FPistol_1.glb?1552801013426" crossorigin="anonymous"></a-asset-item>
       </a-assets>
 
       <a-entity id="rig" movement-controls position="0 1.6 0">
@@ -48,26 +49,27 @@
           <a-entity cursor="fuse: true; fuseTimeout: 500"
                     position="0 0 -1"
                     geometry="primitive: ring; radiusInner: 0.02; radiusOuter: 0.03"
-                    material="color: black; shader: flat">
+                    material="color: black; shader: flat"
+                    raycaster="objects: .raycastable">
           </a-entity>
         </a-entity>
         <a-entity id="gun"
                   gun
-                  gltf-model="https://cdn.aframe.io/test-models/models/glTF-2.0/virtualcity/pistol.gltf"
+                  gltf-model="#gun-model"
                   position="0.5 -0.5 -0.5"
                   rotation="-10 -90 0"
                   scale="0.05 0.05 0.05">
         </a-entity>
       </a-entity>
 
-      <a-box id="target" target position="0 1.6 -4" depth="0.5" height="0.5" width="0.5" color="red"></a-box>
+      <a-box id="target" class="raycastable" target position="0 1.6 -4" depth="0.5" height="0.5" width="0.5" color="red"></a-box>
 
       <a-plane position="0 0 -4" rotation="-90 0 0" width="4" height="4" color="#7BC8A4"></a-plane>
       <a-sky color="#ECECEC"></a-sky>
 
       <a-text id="score" value="0" position="-0.75 1.5 -2"></a-text>
 
-      <a-entity position="0 2.25 -15" particle-system="preset: snow"></a-entity>
+      <a-entity position="0 2.25 -15" particle-system="preset: snow; particleCount: 5000; size: 1"></a-entity>
     </a-scene>
 
     <script>
@@ -82,6 +84,7 @@
         bullet.setAttribute('bullet', '');
         bullet.setAttribute('radius', '0.1');
         bullet.setAttribute('color', 'black');
+        bullet.setAttribute('class', 'raycastable');
         var pos = new THREE.Vector3();
         var rot = new THREE.Euler();
         gun.object3D.getWorldPosition(pos);
