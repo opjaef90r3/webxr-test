@@ -2,35 +2,23 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>A-Frame WebXR FPS Game with Shooting</title>
+    <title>Optimized A-Frame WebXR FPS Game</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/aframe/1.4.2/aframe.min.js"></script>
     <script>
         // カスタムコンポーネント: コントローラーの設定とインタラクションの記録
         AFRAME.registerComponent('controller-listener', {
             init: function () {
                 var el = this.el;
-                this.onGripDown = function () { console.log(el.id + ' grip down'); };
-                this.onGripUp = function () { console.log(el.id + ' grip up'); };
                 this.onTriggerDown = function () {
                     console.log(el.id + ' trigger down');
                     el.emit('shoot');
                 };
-                this.onTriggerUp = function () { console.log(el.id + ' trigger up'); };
-                this.onThumbstickMoved = function (evt) { console.log(el.id + ' thumbstick moved', evt.detail.x, evt.detail.y); };
                 
-                el.addEventListener('gripdown', this.onGripDown);
-                el.addEventListener('gripup', this.onGripUp);
                 el.addEventListener('triggerdown', this.onTriggerDown);
-                el.addEventListener('triggerup', this.onTriggerUp);
-                el.addEventListener('thumbstickmoved', this.onThumbstickMoved);
             },
             remove: function () {
                 var el = this.el;
-                el.removeEventListener('gripdown', this.onGripDown);
-                el.removeEventListener('gripup', this.onGripUp);
                 el.removeEventListener('triggerdown', this.onTriggerDown);
-                el.removeEventListener('triggerup', this.onTriggerUp);
-                el.removeEventListener('thumbstickmoved', this.onThumbstickMoved);
             }
         });
 
@@ -43,7 +31,6 @@
             },
             tick: function (time, timeDelta) {
                 var el = this.el;
-                var data = this.data;
                 var velocity = this.velocity;
 
                 // ヘッドセットの向きを取得
@@ -74,6 +61,7 @@
         AFRAME.registerComponent('shooter', {
             init: function () {
                 this.el.addEventListener('shoot', this.shoot.bind(this));
+                this.bullets = [];
             },
             shoot: function () {
                 var bullet = document.createElement('a-sphere');
@@ -87,6 +75,13 @@
 
                 bullet.setAttribute('bullet', '');
                 this.el.sceneEl.appendChild(bullet);
+                this.bullets.push(bullet);
+
+                // 最大10個の弾丸を管理
+                if (this.bullets.length > 10) {
+                    var oldBullet = this.bullets.shift();
+                    oldBullet.parentNode.removeChild(oldBullet);
+                }
             }
         });
 
@@ -95,6 +90,7 @@
             init: function () {
                 this.direction = new THREE.Vector3();
                 this.el.object3D.getWorldDirection(this.direction);
+                this.lifeTime = 0;
             },
             tick: function (time, timeDelta) {
                 var el = this.el;
@@ -107,20 +103,33 @@
 
                 el.setAttribute('position', position);
 
-                // 5秒後に弾を削除
-                setTimeout(() => {
+                // 3秒後に弾を削除
+                this.lifeTime += timeDelta;
+                if (this.lifeTime > 3000) {
                     el.parentNode.removeChild(el);
-                }, 5000);
+                }
+
+                // 衝突検出
+                var targets = document.querySelectorAll('[target]');
+                for (var i = 0; i < targets.length; i++) {
+                    var target = targets[i];
+                    var targetPos = target.getAttribute('position');
+                    var distance = position.distanceTo(targetPos);
+                    if (distance < 0.5) {  // 衝突判定の閾値
+                        this.el.emit('hit-target', {target: target});
+                        break;
+                    }
+                }
             }
         });
 
         // カスタムコンポーネント: 的
         AFRAME.registerComponent('target', {
             init: function () {
-                this.el.addEventListener('collide', this.onCollide.bind(this));
+                this.el.sceneEl.addEventListener('hit-target', this.onHit.bind(this));
             },
-            onCollide: function (event) {
-                if (event.detail.body.el.hasAttribute('bullet')) {
+            onHit: function (event) {
+                if (event.detail.target === this.el) {
                     this.el.parentNode.removeChild(this.el);
                     // スコアを増やす
                     var scoreEl = document.querySelector('#score');
@@ -145,16 +154,8 @@
                 z: Math.random() * -10 - 5
             });
             target.setAttribute('target', '');
-            target.setAttribute('class', 'collidable');
             document.querySelector('a-scene').appendChild(target);
         }
-
-        // オーディオコンテキストの初期化
-        window.addEventListener('click', function () {
-            if (window.audioContext) return;
-            window.audioContext = new (window.AudioContext || window.webkitAudioContext)();
-            console.log('AudioContext initialized');
-        }, { once: true });
 
         // デバッグログ
         function log(message) {
@@ -163,7 +164,7 @@
     </script>
 </head>
 <body>
-    <a-scene physics="debug: true">
+    <a-scene vr-mode-ui="enabled: true">
         <!-- カメラとコントローラー -->
         <a-entity id="cameraRig" movement-controls>
             <a-entity id="camera" camera look-controls wasd-controls position="0 1.6 0"></a-entity>
@@ -177,21 +178,9 @@
 
         <!-- スコア表示 -->
         <a-text id="score" value="0" position="-0.5 2 -2" scale="0.5 0.5 0.5"></a-text>
-
-        <!-- レイキャスター（パフォーマンスのため、更新間隔を低く設定） -->
-        <a-entity raycaster="objects: .collidable; interval: 1000; far: 5" cursor="rayOrigin: mouse"></a-entity>
     </a-scene>
 
     <script>
-        // VR入力ソースの変更を監視
-        if (navigator.xr) {
-            navigator.xr.addEventListener('inputsourceschange', function (event) {
-                log('Input sources changed');
-                event.added.forEach(source => log('Input source added: ' + source.handedness));
-                event.removed.forEach(source => log('Input source removed: ' + source.handedness));
-            });
-        }
-
         // シーンの読み込みが完了したらログを出力し、的を生成
         document.querySelector('a-scene').addEventListener('loaded', function () {
             log('Scene loaded');
